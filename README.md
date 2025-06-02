@@ -49,6 +49,7 @@ Edit `.env` and add your credentials:
 ```
 GOOGLE_API_KEY=your_actual_api_key
 GOOGLE_SEARCH_ENGINE_ID=your_actual_search_engine_id
+PORT=3000  # Optional: HTTP server port (default: 3000)
 ```
 
 ## Usage
@@ -59,7 +60,19 @@ GOOGLE_SEARCH_ENGINE_ID=your_actual_search_engine_id
 npm start
 ```
 
-The server will start and listen for MCP requests on stdio.
+The server will start an HTTP server on port 3000 (or the port specified in the `PORT` environment variable).
+
+**Endpoints:**
+- `POST /mcp` - Main MCP endpoint for tool requests
+- `GET /health` - Health check endpoint
+
+**Example HTTP Request:**
+```bash
+curl -X POST -H "Content-Type: application/json" \
+     -H "Accept: application/json, text/event-stream" \
+     -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+     http://localhost:3000/mcp
+```
 
 ### Available Tools
 
@@ -71,15 +84,23 @@ Searches the web using Google Custom Search API.
 - `query` (string, required): The search query to execute
 - `num` (number, optional): Number of results to return (1-10, default: 10)
 
-**Example:**
-```json
-{
-  "name": "web_search",
-  "arguments": {
-    "query": "MCP protocol documentation",
-    "num": 5
-  }
-}
+**Example Tool Call:**
+```bash
+curl -X POST -H "Content-Type: application/json" \
+     -H "Accept: application/json, text/event-stream" \
+     -d '{
+       "jsonrpc": "2.0",
+       "id": 1,
+       "method": "tools/call",
+       "params": {
+         "name": "web_search",
+         "arguments": {
+           "query": "MCP protocol documentation",
+           "num": 5
+         }
+       }
+     }' \
+     http://localhost:3000/mcp
 ```
 
 **Response:**
@@ -91,24 +112,15 @@ Returns a JSON object containing:
 
 ## Integration with MCP Clients
 
-This server can be used with any MCP-compatible client, such as Claude Desktop or other AI assistants that support the MCP protocol.
+This server can be used with any MCP-compatible client that supports HTTP transport. 
 
-Example configuration for Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+**For HTTP-based integration:**
+- Server URL: `http://localhost:3000/mcp`
+- Protocol: JSON-RPC 2.0 over HTTP
+- Content-Type: `application/json`
+- Accept: `application/json, text/event-stream`
 
-```json
-{
-  "mcpServers": {
-    "google-search": {
-      "command": "node",
-      "args": ["/path/to/mcp-server/src/index.js"],
-      "env": {
-        "GOOGLE_API_KEY": "your_api_key",
-        "GOOGLE_SEARCH_ENGINE_ID": "your_search_engine_id"
-      }
-    }
-  }
-}
-```
+**For legacy stdio-based clients**, you would need to modify the server to use `StdioServerTransport` instead of `StreamableHTTPServerTransport`.
 
 ## Development
 

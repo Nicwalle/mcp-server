@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
+import express from 'express';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   CallToolRequestSchema,
   ErrorCode,
@@ -143,9 +144,56 @@ class GoogleSearchServer {
   }
 
   async run() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('Google Search MCP server running on stdio');
+    const app = express();
+    app.use(express.json());
+
+    // Handle MCP requests via HTTP POST
+    app.post('/mcp', async (req, res) => {
+      try {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined, // Stateless mode
+          enableJsonResponse: true, // Return JSON responses instead of SSE streams
+        });
+        
+        await this.server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+        
+        res.on('close', () => {
+          transport.close();
+        });
+      } catch (error) {
+        console.error('Error handling MCP request:', error);
+        if (!res.headersSent) {
+          res.status(500).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32603,
+              message: 'Internal server error',
+            },
+            id: null,
+          });
+        }
+      }
+    });
+
+    // Health check endpoint
+    app.get('/health', (req, res) => {
+      res.json({ status: 'ok', message: 'Google Search MCP server is running' });
+    });
+
+    // Start the HTTP server
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+      console.log(`Google Search MCP server running on HTTP port ${PORT}`);
+      console.log(`MCP endpoint: http://localhost:${PORT}/mcp`);
+      console.log(`Health check: http://localhost:${PORT}/health`);
+    });
+
+    // Handle server shutdown
+    process.on('SIGINT', async () => {
+      console.log('Shutting down server...');
+      process.exit(0);
+    });
   }
 }
 
